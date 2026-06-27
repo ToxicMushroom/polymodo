@@ -1,4 +1,4 @@
-mod entry;
+pub mod entry;
 mod history;
 mod launcher;
 mod settings;

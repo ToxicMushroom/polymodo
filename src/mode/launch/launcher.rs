@@ -29,7 +29,7 @@ pub enum Message {
 
 pub struct Launcher {
     entries: LauncherEntriesModel,
-    main_window: HideOnDrop<ui::LauncherWindow>,
+    main_window: Option<HideOnDrop<ui::LauncherWindow>>,
     sender: AppSender<Message>,
     search: FuzzySearch<1, SearchEntry>,
     bias: LaunchHistory,
@@ -42,19 +42,22 @@ impl App for Launcher {
 
     const NAME: AppName = AppName::Launcher;
 
-    fn create(message_sender: AppSender<Self::Message>) -> Self {
+    fn create(message_sender: AppSender<Self::Message>, warmup: bool) -> Self {
         // read the bias and settings from persistent state, if any.
         let bias = Self::read_state::<LaunchHistory>().ok().unwrap_or_default();
         let settings = Self::read_state::<LauncherSettings>()
             .unwrap_or_default()
             .sanitize();
 
-        let main_window: HideOnDrop<ui::LauncherWindow> =
-            ui::LauncherWindow::new().unwrap().hide_on_drop();
+        let main_window: Option<HideOnDrop<ui::LauncherWindow>> = if warmup {
+            None
+        } else {
+            Some(ui::LauncherWindow::new().unwrap().hide_on_drop()) 
+        };
 
         let model: LauncherEntriesModel = Default::default();
 
-        {
+        if let Some(main_window) = &main_window {
             let bias = bias.clone();
 
             // The model passed to the UI is filtered on the `shown` property on LauncherEntryUi,
@@ -103,7 +106,7 @@ impl App for Launcher {
         }
 
         // On search query edit
-        {
+        if let Some(main_window) = &main_window {
             let message_sender = message_sender.clone();
             main_window
                 .global::<ui::LauncherSearch>()
@@ -113,7 +116,7 @@ impl App for Launcher {
         }
 
         // On escape
-        {
+        if let Some(main_window) = &main_window {
             let message_sender = message_sender.clone();
             main_window.on_escape_pressed(move || {
                 message_sender.finish();
@@ -121,7 +124,7 @@ impl App for Launcher {
         }
 
         // On enter (launch)
-        {
+        if let Some(main_window) = &main_window {
             let message_sender = message_sender.clone();
             main_window.on_launch(move |id| {
                 if id < 0 {
@@ -132,14 +135,16 @@ impl App for Launcher {
             });
         }
 
-        {
+        if let Some(main_window) = &main_window {
             let message_sender = message_sender.clone();
             main_window.on_transparency_changed(move |transparency| {
                 message_sender.send(Message::TransparencySet(transparency));
             });
         }
 
-        main_window.show().unwrap();
+        if let Some(main_window) = &main_window {
+            main_window.show().unwrap();
+        }
 
         let mut launcher = Launcher {
             entries: model,
@@ -263,7 +268,9 @@ impl Launcher {
         let LauncherSettings { transparency } = self.settings;
         let window = &self.main_window;
 
-        window.set_transparency(transparency);
+        if let Some(window) = window {
+            window.set_transparency(transparency);
+        }
     }
 }
 

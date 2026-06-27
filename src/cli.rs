@@ -8,6 +8,12 @@ pub struct Args {
     /// Do not connect to or launch the polymodo daemon
     #[arg(long)]
     pub standalone: bool,
+
+    /// Only launch a polymodo daemon.
+    /// Useful after graphical-session startup to preload heavy tasks. Results in a snappy first window spawn.
+    #[arg(long)]
+    pub daemon: bool,
+    
     /// If an application of the same type is already running, don't launch it.
     /// This argument does nothing when combined with --standalone, as a standalone instance can't have any apps running already.
     #[arg(long, short)]

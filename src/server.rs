@@ -8,19 +8,21 @@ enum ServerError {
     FailedToGetResult,
 }
 
-pub fn run_server() -> anyhow::Result<std::convert::Infallible> {
+pub fn run_server(only_daemon: bool) -> anyhow::Result<std::convert::Infallible> {
     crate::setup_slint_backend();
 
     // set up the polymodo daemon socket for clients to connect to
     let ipc_server = crate::ipc::create_ipc_server()?; // TODO: try? here is probably not good
 
-    slint::invoke_from_event_loop(|| {
+    slint::invoke_from_event_loop(move || {
         let poly = Polymodo::new().into_handle();
         let _run_task = poly.start_running();
 
         let _server_task = slint::spawn_local(accept_clients(poly.clone(), ipc_server));
 
-        let key = poly.spawn_app::<Launcher>().expect("failed to spawn app");
+        let key = poly
+            .spawn_app::<Launcher>(only_daemon)
+            .expect("failed to spawn app");
         log::info!("spawned launcher with key {key}");
     })
     .expect("an event loop");
@@ -69,7 +71,7 @@ async fn serve_client(polymodo: PolymodoHandle, client: IpcS2C) {
                 }
 
                 let app_key = polymodo
-                    .spawn_app::<Launcher>()
+                    .spawn_app::<Launcher>(false)
                     .expect("failed to spawn app"); // todo: no expect
                 let app_result = polymodo
                     .wait_for_app_stop(app_key)

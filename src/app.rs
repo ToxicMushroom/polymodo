@@ -17,7 +17,7 @@ pub trait App: Sized {
 
     const NAME: AppName;
 
-    fn create(message_sender: AppSender<Self::Message>) -> Self;
+    fn create(message_sender: AppSender<Self::Message>, warmup: bool) -> Self;
 
     #[allow(unused_variables)]
     fn on_message(&mut self, message: Self::Message) {

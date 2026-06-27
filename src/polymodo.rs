@@ -9,7 +9,7 @@ use std::rc::Rc;
 type FinishSender = oneshot::Sender<Option<Box<dyn AppResult + Send>>>;
 
 pub struct Polymodo {
-    apps: RefCell<HashMap<app::AppKey, Box<dyn app::AppDriver>>>,
+    pub(crate) apps: RefCell<HashMap<app::AppKey, Box<dyn app::AppDriver>>>,
     app_finish_senders: RefCell<HashMap<app::AppKey, FinishSender>>,
     app_message_channel: (
         smol::channel::Sender<AppEvent>,
@@ -161,7 +161,7 @@ impl PolymodoHandle {
     /// Returns the associated app key.
     ///
     /// This method only exists on `PolymodoHandle`, as a new handle is created to pass onto the event loop.
-    pub fn spawn_app<A>(&self) -> anyhow::Result<app::AppKey>
+    pub fn spawn_app<A>(&self, warmup: bool) -> anyhow::Result<app::AppKey>
     where
         A: app::App + 'static,
         A::Message: Send + 'static,
@@ -174,7 +174,7 @@ impl PolymodoHandle {
         let handle = self.clone();
 
         // Create the app and its driver (wrapper)
-        let app = A::create(app_sender);
+        let app = A::create(app_sender, warmup);
         let driver = app::driver_for(app);
 
         // Add it to the list

@@ -3,7 +3,7 @@ mod cli;
 mod config;
 mod fuzzy_search;
 mod ipc;
-mod mode;
+pub mod mode;
 mod notify;
 mod persistence;
 mod polymodo;
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
             // let's become that!
             log::info!("Starting polymodo daemon");
 
-            server::run_server()?;
+            server::run_server(args.daemon)?;
 
             unreachable!();
         }
@@ -111,7 +111,7 @@ pub fn run_standalone() -> anyhow::Result<()> {
     slint::invoke_from_event_loop(|| {
         let poly = Polymodo::new().into_handle();
         let _run_task = poly.start_running();
-        let app = poly.spawn_app::<Launcher>().expect("Failed to spawn app");
+        let app = poly.spawn_app::<Launcher>(false).expect("Failed to spawn app");
 
         slint::spawn_local(async move {
             let result = poly.wait_for_app_stop(app).await;

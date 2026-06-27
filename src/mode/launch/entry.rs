@@ -1,6 +1,7 @@
 use super::*;
 use crate::app::AppSender;
 use indexmap::IndexMap;
+use log::debug;
 use once_map::OnceMap;
 use slint::SharedString;
 use smol::io::AsyncReadExt;
@@ -67,6 +68,7 @@ pub fn scour_desktop_entries(sender: AppSender<Message>) {
     // immediately push cached entries
     {
         let rows = DESKTOP_ENTRIES.lock().unwrap();
+        debug!("# Cached desktop entries: {}", rows.len());
         for (_, row) in rows.iter() {
             sender.send(Message::NewEntry(next_id(), row.clone()));
         }
