@@ -178,18 +178,22 @@ impl IconPixels {
         if is_svg {
             Self::rasterize_svg(data)
         } else {
-            let image = image::load_from_memory(data).ok()?.into_rgba8();
-            let pixels = slint::SharedPixelBuffer::clone_from_slice(
-                image.as_raw(),
-                image.width(),
-                image.height(),
-            );
-
-            Some(Self {
-                pixels,
-                premultiplied: false,
-            })
+            // Without an SVG extension, the icon is most likely a raster image, whose format can
+            // be told from its content. But `Icon` may also be an absolute path without any
+            // extension (AppImages do this), which may well be an SVG.
+            Self::decode_raster(data).or_else(|| Self::rasterize_svg(data))
         }
+    }
+
+    fn decode_raster(data: &[u8]) -> Option<Self> {
+        let image = image::load_from_memory(data).ok()?.into_rgba8();
+        let pixels =
+            slint::SharedPixelBuffer::clone_from_slice(image.as_raw(), image.width(), image.height());
+
+        Some(Self {
+            pixels,
+            premultiplied: false,
+        })
     }
 
     fn rasterize_svg(data: &[u8]) -> Option<Self> {
@@ -389,4 +393,53 @@ pub async fn load_icon(icon: &str) -> Option<IconPixels> {
     });
 
     pixels
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 8"><rect width="16" height="8" fill="red"/></svg>"#;
+
+    fn png() -> Vec<u8> {
+        let mut png = vec![];
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([0, 255, 0, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        png
+    }
+
+    fn size(icon: &IconPixels) -> (u32, u32) {
+        (icon.pixels.width(), icon.pixels.height())
+    }
+
+    #[test]
+    fn decodes_svg_by_extension() {
+        let icon = IconPixels::decode(Path::new("/icons/app.svg"), SVG).unwrap();
+        assert!(icon.premultiplied);
+        // rasterized at `ICON_RASTER_SIZE`, keeping the aspect ratio
+        assert_eq!(size(&icon), (ICON_RASTER_SIZE, ICON_RASTER_SIZE / 2));
+    }
+
+    #[test]
+    fn decodes_png_by_content() {
+        let icon = IconPixels::decode(Path::new("/icons/app.png"), &png()).unwrap();
+        assert!(!icon.premultiplied);
+        assert_eq!(size(&icon), (4, 2));
+    }
+
+    /// AppImages tend to set `Icon` to an absolute path without an extension.
+    #[test]
+    fn decodes_icons_without_extension() {
+        let svg = IconPixels::decode(Path::new("/AppImages/.icons/eden"), SVG).unwrap();
+        assert_eq!(size(&svg), (ICON_RASTER_SIZE, ICON_RASTER_SIZE / 2));
+
+        let png = IconPixels::decode(Path::new("/AppImages/.icons/app"), &png()).unwrap();
+        assert_eq!(size(&png), (4, 2));
+    }
+
+    #[test]
+    fn rejects_garbage() {
+        assert!(IconPixels::decode(Path::new("/icons/app"), b"not an image").is_none());
+    }
 }
