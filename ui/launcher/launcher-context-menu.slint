@@ -131,7 +131,7 @@ export component LauncherContextMenuPopup inherits PopupWindow {
 
                 ContextMenuItem {
                     text: LauncherContextMenu.has-override ? "Edit desktop entry" : "Override desktop entry";
-                    icon: @image-url("../assets/pen.svg");
+                    icon: @image-url("../assets/pen.png");
                     highlighted: root.current == 0;
 
                     hovered => { root.current = 0; }
@@ -151,7 +151,7 @@ export component LauncherContextMenuPopup inherits PopupWindow {
                             alignment: center;
 
                             Image {
-                                source: @image-url("../assets/override.svg");
+                                source: @image-url("../assets/override.png");
                                 width: 14px;
                                 height: 14px;
                                 colorize: Palette.accent-background;
@@ -164,7 +164,7 @@ export component LauncherContextMenuPopup inherits PopupWindow {
 
                 for action[index] in LauncherContextMenu.actions: ContextMenuItem {
                     text: action;
-                    icon: @image-url("../assets/play.svg");
+                    icon: @image-url("../assets/play.png");
                     highlighted: root.current == index + 1;
 
                     hovered => { root.current = index + 1; }

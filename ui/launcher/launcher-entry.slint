@@ -1,4 +1,4 @@
-import { HorizontalBox, VerticalBox, ListView, Palette } from "std-widgets.slint";
+import { HorizontalBox, VerticalBox, Palette } from "std-widgets.slint";
 
 export struct LauncherEntry {
     icon: image,
@@ -9,14 +9,7 @@ export struct LauncherEntry {
 }
 
 export global LauncherEntries {
-    in-out property <[LauncherEntry]> entries: [
-        {
-            name: "Arch linux",
-            icon: @image-url("/usr/share/pixmaps/archlinux-logo.svg"),
-            generic_name: "A linux distribution",
-            description: "This certainly isn't an ad!"
-        }
-    ];
+    in-out property <[LauncherEntry]> entries;
 }
 
 export component LauncherEntryDelegate inherits Rectangle {
@@ -69,6 +62,49 @@ export component LauncherEntryDelegate inherits Rectangle {
                 overflow: elide;
             }
         }
+    }
+}
+
+/// A minimal stand-in for the std `ListView`, with a plain scroll indicator.
+///
+/// The std `ListView` is a (fluent) `ScrollView`, whose scrollbar buttons are SVG icons. Decoding
+/// any SVG makes Slint load the whole system font database on the UI thread, which takes about
+/// half of the launcher window's creation time.
+///
+/// This component must be named `ListView`: that is how the Slint compiler recognises a list
+/// view, and only instantiates the visible items of a `for` placed directly in it.
+component ListView {
+    out property <length> visible-width <=> flickable.width;
+    out property <length> visible-height <=> flickable.height;
+    in-out property <length> viewport-width <=> flickable.viewport-width;
+    in-out property <length> viewport-height <=> flickable.viewport-height;
+    in-out property <length> viewport-x <=> flickable.viewport-x;
+    in-out property <length> viewport-y <=> flickable.viewport-y;
+    in-out property <bool> has-focus;
+
+    min-height: 50px;
+    min-width: 50px;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    preferred-height: 100%;
+    preferred-width: 100%;
+    accessible-role: list;
+
+    flickable := Flickable {
+        interactive: false;
+        width: parent.width;
+        height: parent.height;
+
+        @children
+    }
+
+    if flickable.viewport-height > flickable.height: Rectangle {
+        x: root.width - self.width - 2px;
+        y: (root.height - self.height) * (-flickable.viewport-y / (flickable.viewport-height - flickable.height));
+        width: 3px;
+        height: max(16px, root.height * root.height / flickable.viewport-height);
+        border-radius: self.width / 2;
+        background: Palette.foreground.transparentize(70%);
     }
 }
 
