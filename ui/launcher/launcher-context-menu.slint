@@ -1,0 +1,176 @@
+import { Palette } from "std-widgets.slint";
+import { Separator } from "../separator.slint";
+
+export global LauncherContextMenu {
+    /// The name of the entry the context menu was opened for
+    in property <string> entry-name;
+    /// Whether a user-specific override (in $XDG_DATA_HOME/applications) exists for the entry
+    in property <bool> has-override;
+    /// The names of the entry's additional desktop actions
+    in property <[string]> actions;
+
+    /// Called right before the menu is shown, to fill in the properties above
+    callback prepare(id: int);
+    callback edit(id: int);
+    callback launch-action(id: int, action: int);
+}
+
+component ContextMenuItem inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> highlighted;
+
+    callback hovered();
+    callback activated();
+
+    height: 32px;
+    border-radius: 8px;
+    background: highlighted ? white.transparentize(90%) : transparent;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+
+            Image {
+                source: icon;
+                width: 14px;
+                height: 14px;
+                colorize: white;
+            }
+        }
+
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        @children
+    }
+
+    TouchArea {
+        changed has-hover => {
+            if (self.has-hover) {
+                root.hovered();
+            }
+        }
+        clicked => root.activated();
+    }
+}
+
+export component LauncherContextMenuPopup inherits PopupWindow {
+    in property <int> entry-id;
+
+    // 0 is the 'edit' item, 1.. are the desktop actions
+    property <int> current: 0;
+    property <int> item-count: LauncherContextMenu.actions.length + 1;
+
+    close-policy: close-on-click-outside;
+
+    function activate(index: int) {
+        root.close();
+        if (index == 0) {
+            LauncherContextMenu.edit(root.entry-id);
+        } else {
+            LauncherContextMenu.launch-action(root.entry-id, index - 1);
+        }
+    }
+
+    Rectangle {
+        background: #161616;
+        border-radius: 12px;
+        border-color: #333333;
+        border-width: 1px;
+
+        focus-scope := FocusScope {
+            init => {
+                self.focus();
+            }
+
+            key-pressed(event) => {
+                if (event.text == Key.UpArrow || (event.text == Key.Tab && event.modifiers.shift) || event.text == Key.Backtab) {
+                    root.current = Math.mod(root.current - 1, root.item-count);
+                    return accept;
+                } else if (event.text == Key.DownArrow || event.text == Key.Tab) {
+                    root.current = Math.mod(root.current + 1, root.item-count);
+                    return accept;
+                } else if (event.text == Key.Home || event.text == Key.PageUp) {
+                    root.current = 0;
+                    return accept;
+                } else if (event.text == Key.End || event.text == Key.PageDown) {
+                    root.current = root.item-count - 1;
+                    return accept;
+                } else if (event.text == Key.Return || event.text == " ") {
+                    root.activate(root.current);
+                    return accept;
+                } else if (event.text == Key.Escape || event.text == Key.LeftArrow || event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift)) {
+                    root.close();
+                    return accept;
+                }
+                reject
+            }
+
+            VerticalLayout {
+                padding: 4px;
+                spacing: 2px;
+
+                Text {
+                    text: LauncherContextMenu.entry-name;
+                    font-size: 0.7rem;
+                    color: Palette.foreground.darker(1);
+                    overflow: elide;
+                    height: 24px;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+
+                ContextMenuItem {
+                    text: LauncherContextMenu.has-override ? "Edit desktop entry" : "Override desktop entry";
+                    icon: @image-url("../assets/pen.svg");
+                    highlighted: root.current == 0;
+
+                    hovered => { root.current = 0; }
+                    activated => root.activate(0);
+
+                    if LauncherContextMenu.has-override: HorizontalLayout {
+                        spacing: 4px;
+
+                        Text {
+                            text: "override";
+                            font-size: 0.7rem;
+                            color: Palette.foreground.darker(1);
+                            vertical-alignment: center;
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+
+                            Image {
+                                source: @image-url("../assets/override.svg");
+                                width: 14px;
+                                height: 14px;
+                                colorize: Palette.accent-background;
+                            }
+                        }
+                    }
+                }
+
+                if LauncherContextMenu.actions.length > 0: Separator { }
+
+                for action[index] in LauncherContextMenu.actions: ContextMenuItem {
+                    text: action;
+                    icon: @image-url("../assets/play.svg");
+                    highlighted: root.current == index + 1;
+
+                    hovered => { root.current = index + 1; }
+                    activated => root.activate(index + 1);
+                }
+            }
+        }
+    }
+}

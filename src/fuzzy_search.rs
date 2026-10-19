@@ -11,6 +11,8 @@ pub struct FuzzySearch<const C: usize, D: Sync + Send + 'static> {
     // notified any time a user may read matches and get a new result from it
     notify: crate::notify::Notify,
     query: [String; C],
+    /// Whether the matches have changed since [FuzzySearch::take_changed] was last called
+    changed: bool,
 }
 
 pub trait Row<const C: usize> {
@@ -57,7 +59,14 @@ impl<const C: usize, D: Sync + Send + 'static> FuzzySearch<C, D> {
     }
 
     pub fn tick(&mut self) -> nucleo::Status {
-        self.nucleo.tick(0)
+        let status = self.nucleo.tick(0);
+        self.changed |= status.changed;
+        status
+    }
+
+    /// Returns whether the matches have changed since this function was last called.
+    pub fn take_changed(&mut self) -> bool {
+        std::mem::take(&mut self.changed)
     }
 
     pub fn notify(&self) -> crate::notify::Notify {
@@ -96,6 +105,7 @@ where
             injector,
             notify,
             query: [const { String::new() }; _],
+            changed: false,
         }
     }
 

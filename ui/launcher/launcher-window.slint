@@ -16,8 +16,9 @@ import {
 import { Separator } from "../separator.slint";
 import { SettingsPopup } from "launcher-settings.slint";
 import { PolyButton } from "../button.slint";
+import { LauncherContextMenu, LauncherContextMenuPopup } from "launcher-context-menu.slint";
 
-export { LauncherEntries }
+export { LauncherEntries, LauncherContextMenu }
 
 export global LauncherSearch {
     callback search-edited(/*query*/ string);
@@ -51,6 +52,55 @@ export component LauncherWindow inherits Window {
         border-radius: 12px;
         border-color: #333333;
         border-width: 1px;
+    }
+
+    property <int> context-menu-entry: -1;
+    property <length> context-menu-width: 280px;
+    property <length> context-menu-x;
+    property <length> context-menu-y;
+
+    /// Open the context menu for the entry at `index` in the (filtered) entries model.
+    /// The top of the menu is aligned to the bottom of the entry; `x` (relative to the window)
+    /// only determines the horizontal position.
+    function open-context-menu(index: int, x: length) {
+        if (index < 0 || index >= LauncherEntries.entries.length) {
+            return;
+        }
+
+        list_view.set-current-item(index);
+        context-menu-entry = LauncherEntries.entries[index].id;
+        LauncherContextMenu.prepare(context-menu-entry);
+
+        // The menu's height is estimated from the number of items.
+        let action-count = LauncherContextMenu.actions.length;
+        let menu-height = 8px + 26px + 34px * (action-count + 1) + (action-count > 0 ? 7px : 0px);
+
+        // If the menu wouldn't fit below the entry, scroll the list up to make room.
+        let shortfall = list_view.absolute-position.y + list_view.current-item-bottom() + menu-height + 4px - root.height;
+        if (shortfall > 0px) {
+            list_view.scroll-content-up(shortfall);
+        }
+
+        context-menu-x = max(4px, min(x, root.width - context-menu-width - 4px));
+        // Only when the list can't scroll far enough (the last few entries) is the menu
+        // pushed up over the entry, to keep it inside the window.
+        context-menu-y = max(4px, min(
+            list_view.absolute-position.y + list_view.current-item-bottom(),
+            root.height - menu-height - 4px));
+
+        context_menu.show();
+    }
+
+    /// Open the context menu for the currently selected entry.
+    function open-context-menu-for-current() {
+        open-context-menu(list_view.current-item, list_view.absolute-position.x + 48px);
+    }
+
+    context_menu := LauncherContextMenuPopup {
+        x: context-menu-x;
+        y: context-menu-y;
+        width: context-menu-width;
+        entry-id: context-menu-entry;
     }
 
     settings_popup := SettingsPopup {
@@ -87,6 +137,9 @@ export component LauncherWindow inherits Window {
                             launch(LauncherEntries.entries[c].id);
                         }
                         return accept;
+                    } else if (event.text == Key.Menu || event.text == Key.Tab || (event.text == Key.F10 && event.modifiers.shift)) {
+                        open-context-menu-for-current();
+                        return accept;
                     } else {
                         return list_view.key-pressed(event);
                     }
@@ -116,6 +169,10 @@ export component LauncherWindow inherits Window {
                 model: LauncherEntries.entries;
                 current-item: 0;
                 horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+
+                context-menu-requested(index, position) => {
+                    open-context-menu(index, position.x);
+                }
 
                 if LauncherEntries.entries.length == 0: Text {
                     text: "No results";

@@ -8,6 +8,7 @@ mod notify;
 mod persistence;
 mod polymodo;
 mod server;
+mod timing;
 mod ui;
 mod xdg;
 
@@ -28,7 +29,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 fn main() -> anyhow::Result<()> {
+    timing::init();
     setup_logging()?;
+    timing::milestone("logging set up");
 
     let args = cli::Args::parse();
 
@@ -106,9 +109,10 @@ async fn run_client(args: Args, client: IpcC2S) -> anyhow::Result<Option<String>
 ///
 /// This function returns when the spawned app dies.
 pub fn run_standalone() -> anyhow::Result<()> {
-    setup_slint_backend();
+    timing::time("select slint backend", setup_slint_backend);
 
     slint::invoke_from_event_loop(|| {
+        timing::milestone("event loop started");
         let poly = Polymodo::new().into_handle();
         let _run_task = poly.start_running();
         let app = poly.spawn_app::<Launcher>(false).expect("Failed to spawn app");

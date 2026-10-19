@@ -38,6 +38,17 @@ nucleo = "0.5.0"
 serde_json = "1.0.145"
 serde = { version = "1.0.228", features = ["derive"] }
 once_map = "0.4.23"
+# Icon decoding, off of the UI thread. Same versions as slint uses internally.
+resvg = { version = "0.45.1", default-features = false }
+image = { version = "0.25.8", default-features = false, features = ["png"] }
 
 [build-dependencies]
 slint-build = { git = "https://github.com/zeroeightysix/slint" }
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "startup"
+path = "benchmarks/startup.rs"
+harness = false

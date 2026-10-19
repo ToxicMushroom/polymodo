@@ -78,6 +78,9 @@ component StandardListViewBase inherits ListView {
 
     callback current-item-changed(current-item: int);
     callback item-pointer-event(item: int, event: PointerEvent, position: Point);
+    /// Emitted when the context menu of an item is requested by right-clicking it.
+    /// `position` is relative to the window.
+    callback context-menu-requested(item: int, position: Point);
 
     public function set-current-item-next() {
         set-current-item(Math.mod(current-item + 1, model.length))
@@ -96,6 +99,16 @@ component StandardListViewBase inherits ListView {
         current-item = index;
         focus-item = index;
         current-item-changed(current-item);
+    }
+
+    /// The y position (relative to this list view) of the bottom of the current item.
+    public pure function current-item-bottom() -> length {
+        return root.item-y(root.current-item) + root.item-height;
+    }
+
+    /// Scroll the content up by `amount` (as far as the content allows), revealing items below.
+    public function scroll-content-up(amount: length) {
+        root.viewport-y = max(min(0px, root.visible-height - root.viewport-height), root.viewport-y - amount);
     }
 
     private property <length> item-height: self.viewport-height / self.model.length;
@@ -202,6 +215,14 @@ component StandardListViewBase inherits ListView {
             }
 
             pointer-event(pe) => {
+                if (pe.button == PointerEventButton.right && pe.kind == PointerEventKind.down) {
+                    root.set-current-item(index);
+                    root.context-menu-requested(index, {
+                        x: self.absolute-position.x + self.mouse-x,
+                        y: self.absolute-position.y + self.mouse-y,
+                    });
+                }
+
                 root.item-pointer-event(index, pe, {
                     x: self.absolute-position.x + self.mouse-x - root.absolute-position.x,
                     y: self.absolute-position.y + self.mouse-y - root.absolute-position.y,
