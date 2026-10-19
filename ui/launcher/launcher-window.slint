@@ -26,6 +26,9 @@ export component LauncherWindow inherits Window {
     in property <length> font-size: 16px;
     in-out property <float> transparency: 0.2;
 
+    /// How far the entry list is scrolled down (for tests).
+    out property <length> scroll-position: -list_view.viewport-y;
+
     callback escape-pressed();
     callback launch(id: int);
     callback transparency-changed(transparency: float);

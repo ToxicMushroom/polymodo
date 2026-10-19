@@ -47,6 +47,8 @@ slint-build = { git = "https://github.com/zeroeightysix/slint" }
 
 [dev-dependencies]
 criterion = "0.8.2"
+# headless UI tests; must be the same slint revision as above
+i-slint-backend-testing = { git = "https://github.com/zeroeightysix/slint", rev = "232a163e8" }
 
 [[bench]]
 name = "startup"

@@ -82,6 +82,16 @@ component ListView {
     in-out property <length> viewport-y <=> flickable.viewport-y;
     in-out property <bool> has-focus;
 
+    /// A left click (without dragging) at `position`, relative to this list view.
+    callback clicked(position: Point);
+    /// A right mouse button press at `position`, relative to this list view.
+    callback right-pressed(position: Point);
+
+    /// Stop any ongoing flick.
+    public function stop-flick() {
+        momentum.running = false;
+    }
+
     min-height: 50px;
     min-width: 50px;
     horizontal-stretch: 1;
@@ -90,6 +100,9 @@ component ListView {
     preferred-width: 100%;
     accessible-role: list;
 
+    // Dragging the content is implemented by `drag-area` below rather than by the Flickable: its built-in
+    // flicking uses the average speed of the whole drag and stops after a fixed 250ms, which
+    // feels abrupt. The Flickable still handles mouse wheel and touchpad scrolling.
     flickable := Flickable {
         interactive: false;
         width: parent.width;
@@ -98,13 +111,155 @@ component ListView {
         @children
     }
 
-    if flickable.viewport-height > flickable.height: Rectangle {
-        x: root.width - self.width - 2px;
-        y: (root.height - self.height) * (-flickable.viewport-y / (flickable.viewport-height - flickable.height));
-        width: 3px;
-        height: max(16px, root.height * root.height / flickable.viewport-height);
-        border-radius: self.width / 2;
-        background: Palette.foreground.transparentize(70%);
+    /// Distance the pointer must move before a press becomes a drag
+    property <length> drag-threshold: 8px;
+    /// Velocity (in px per ms) is smoothed over this fraction of the latest measurement
+    property <float> velocity-smoothing: 0.6;
+    /// Releasing after holding still for this long doesn't flick
+    property <duration> flick-timeout: 80ms;
+    /// The flick velocity is multiplied by this every millisecond
+    property <float> friction: 0.997;
+    /// Below this velocity (in px per ms), a flick stops
+    property <float> min-velocity: 0.02;
+
+    property <bool> dragging;
+    property <length> drag-start-viewport-y;
+    property <length> last-y;
+    property <duration> last-time;
+    property <float> velocity; // px per ms, positive is towards the end of the list
+
+    pure function clamp-viewport-y(y: length) -> length {
+        return max(min(0px, flickable.height - flickable.viewport-height), min(0px, y));
+    }
+
+    drag-area := TouchArea {
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.stop-flick();
+                root.dragging = false;
+                root.drag-start-viewport-y = flickable.viewport-y;
+                root.last-y = self.mouse-y;
+                root.last-time = animation-tick();
+                root.velocity = 0;
+            } else if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                if (root.dragging) {
+                    // only flick if the pointer was still moving when released
+                    if (animation-tick() - root.last-time < root.flick-timeout && abs(root.velocity) > root.min-velocity) {
+                        momentum.last-tick = animation-tick();
+                        momentum.running = true;
+                    }
+                } else {
+                    root.clicked({ x: self.mouse-x, y: self.mouse-y });
+                }
+                root.dragging = false;
+            } else if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                root.stop-flick();
+                root.right-pressed({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+
+        moved => {
+            if (!self.pressed) {
+                return;
+            }
+            if (!root.dragging && abs(self.mouse-y - self.pressed-y) > root.drag-threshold) {
+                root.dragging = true;
+            }
+            if (root.dragging) {
+                flickable.viewport-y = root.clamp-viewport-y(root.drag-start-viewport-y + self.mouse-y - self.pressed-y);
+
+                let now = animation-tick();
+                let elapsed = (now - root.last-time) / 1ms;
+                if (elapsed > 0) {
+                    let instant-velocity = (root.last-y - self.mouse-y) / 1px / elapsed;
+                    root.velocity = root.velocity-smoothing * instant-velocity + (1 - root.velocity-smoothing) * root.velocity;
+                    root.last-y = self.mouse-y;
+                    root.last-time = now;
+                }
+            }
+        }
+
+        scroll-event(event) => {
+            // let the Flickable handle scrolling, but stop flicking first
+            root.stop-flick();
+            reject
+        }
+    }
+
+    /// How far the content can scroll
+    property <length> scroll-range: flickable.viewport-height - flickable.height;
+    property <length> thumb-height: max(16px, root.height * root.height / flickable.viewport-height);
+    property <length> thumb-y: (root.height - root.thumb-height) * (-flickable.viewport-y / root.scroll-range);
+
+    /// Scroll such that the top of the scrollbar's thumb is at `y`.
+    function scroll-thumb-to(y: length) {
+        flickable.viewport-y = root.clamp-viewport-y(-y / (root.height - root.thumb-height) * root.scroll-range);
+    }
+
+    // On top of `drag-area`, so that it gets pointer events first.
+    if root.scroll-range > 0: scrollbar := TouchArea {
+        x: root.width - self.width;
+        width: 12px;
+        height: root.height;
+
+        /// Where on the thumb it was grabbed
+        property <length> grab-offset;
+
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.stop-flick();
+                if (self.mouse-y >= root.thumb-y && self.mouse-y <= root.thumb-y + root.thumb-height) {
+                    self.grab-offset = self.mouse-y - root.thumb-y;
+                } else {
+                    // pressed beside the thumb: jump there, centering the thumb on the pointer
+                    self.grab-offset = root.thumb-height / 2;
+                    root.scroll-thumb-to(self.mouse-y - self.grab-offset);
+                }
+            }
+        }
+
+        moved => {
+            if (self.pressed) {
+                root.scroll-thumb-to(self.mouse-y - self.grab-offset);
+            }
+        }
+
+        thumb := Rectangle {
+            x: parent.width - self.width - 2px;
+            y: root.thumb-y;
+            width: parent.has-hover || parent.pressed ? 6px : 3px;
+            height: root.thumb-height;
+            border-radius: self.width / 2;
+            background: Palette.foreground.transparentize(parent.pressed ? 40% : 70%);
+
+            animate width { duration: 100ms; }
+        }
+    }
+
+    momentum := Timer {
+        interval: 16ms;
+        running: false;
+
+        property <duration> last-tick;
+
+        triggered => {
+            let now = animation-tick();
+            let elapsed = (now - self.last-tick) / 1ms;
+            self.last-tick = now;
+
+            let new-y = root.clamp-viewport-y(flickable.viewport-y - root.velocity * elapsed * 1px);
+            if (new-y == flickable.viewport-y) {
+                // reached either end of the list
+                self.running = false;
+                return;
+            }
+            flickable.viewport-y = new-y;
+
+            root.velocity *= Math.pow(root.friction, elapsed);
+            if (abs(root.velocity) < root.min-velocity) {
+                self.running = false;
+            }
+        }
     }
 }
 
@@ -113,7 +268,6 @@ component StandardListViewBase inherits ListView {
     in-out property <int> current-item: -1;
 
     callback current-item-changed(current-item: int);
-    callback item-pointer-event(item: int, event: PointerEvent, position: Point);
     /// Emitted when the context menu of an item is requested by right-clicking it.
     /// `position` is relative to the window.
     callback context-menu-requested(item: int, position: Point);
@@ -169,14 +323,16 @@ component StandardListViewBase inherits ListView {
         return root.viewport-y + index * root.item-height;
     }
 
+    /// The index of the item at `y` (relative to this list view).
     pure function item-at-y(y: length) -> int {
-        return min(root.model.length - 1, max(0, round(y / root.item-height)));
+        return min(root.model.length - 1, max(0, floor((y - root.viewport-y) / root.item-height)));
     }
 
     function bring-into-view(index: int) {
         if (index < 0 || index >= model.length) {
             return;
         }
+        root.stop-flick();
         into-view-item = index;
 
         if (into-view-item-y < 0) {
@@ -239,32 +395,24 @@ component StandardListViewBase inherits ListView {
         root.bring-into-view(root.focus-item);
     }
 
+    // Pointer input is handled for the whole list by `ListView`, as items can't tell a click from
+    // the start of a drag.
+    clicked(position) => {
+        root.set-current-item(root.item-at-y(position.y));
+    }
+
+    right-pressed(position) => {
+        let index = root.item-at-y(position.y);
+        root.set-current-item(index);
+        root.context-menu-requested(index, {
+            x: root.absolute-position.x + position.x,
+            y: root.absolute-position.y + position.y,
+        });
+    }
+
     for item[index] in root.model: LauncherEntryDelegate {
         selected: index == root.current-item;
-//        has-focus: root.has-focus && index == root.focus-item;
-//        has-hover: i-touch-area.has-hover;
         entry: item;
-
-        i-touch-area := TouchArea {
-            clicked => {
-                root.set-current-item(index);
-            }
-
-            pointer-event(pe) => {
-                if (pe.button == PointerEventButton.right && pe.kind == PointerEventKind.down) {
-                    root.set-current-item(index);
-                    root.context-menu-requested(index, {
-                        x: self.absolute-position.x + self.mouse-x,
-                        y: self.absolute-position.y + self.mouse-y,
-                    });
-                }
-
-                root.item-pointer-event(index, pe, {
-                    x: self.absolute-position.x + self.mouse-x - root.absolute-position.x,
-                    y: self.absolute-position.y + self.mouse-y - root.absolute-position.y,
-                });
-            }
-        }
     }
 }
 

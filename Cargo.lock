@@ -1915,6 +1915,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "i-slint-backend-testing"
+version = "1.13.0"
+source = "git+https://github.com/zeroeightysix/slint?rev=232a163e8#232a163e8b1d76788efc26bfc0ac5a42f8b49319"
+dependencies = [
+ "i-slint-core",
+ "vtable",
+]
+
+[[package]]
 name = "i-slint-backend-winit"
 version = "1.13.0"
 source = "git+https://github.com/zeroeightysix/slint?rev=232a163e8#232a163e8b1d76788efc26bfc0ac5a42f8b49319"
@@ -3584,6 +3593,7 @@ dependencies = [
  "criterion",
  "derive_more",
  "fork",
+ "i-slint-backend-testing",
  "icon",
  "image",
  "indexmap",
